@@ -231,13 +231,13 @@ int main (int argc, char *argv[]) {
    t_mycode_median  = t_mycode_median / no_measures;
    t_mycode_grad  = t_mycode_grad / no_measures;  
    
-   printf(" Mean meadian time referebce  %f ms\n",t_ref_median);
-   printf(" Mean sobel time referebce  %f ms\n",t_ref_grad);
-   printf(" Mean median time mycode %f ms\n",t_mycode_median);
-   printf(" Mean sobel time mycode %f ms\n\n",t_mycode_grad);
+   printf("Mean meadian time reference  %f ms\n",t_ref_median);
+   printf("Mean sobel time reference  %f ms\n",t_ref_grad);
+   printf("Mean median time mycode %f ms\n",t_mycode_median);
+   printf("Mean sobel time mycode %f ms\n\n",t_mycode_grad);
    
-      printf(" Speedup median %f ms\n",t_ref_median/t_mycode_median);
-      printf(" Speedup sobel %f ms\n",t_ref_grad/t_mycode_grad);
+      printf("Speedup median %f ms\n",t_ref_median/t_mycode_median);
+      printf("Speedup sobel %f ms\n",t_ref_grad/t_mycode_grad);
    
     printf("------------------\n");
    

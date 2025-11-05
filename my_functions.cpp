@@ -8,28 +8,28 @@ void my_sobel (Mat im_in, Mat im_out)
  int rows = im_in.rows; // height
  int cols = im_in.cols; // width
  
- 
-    for (int i = 1; i< cols-1; i++){
-		for (int j = 1; j< rows-1; j++){
-			int n = im_in.at<uchar>(j-1,i);
-			int s = im_in.at<uchar>(j+1,i);
-			int e = im_in.at<uchar>(j,i+1);
-			int w = im_in.at<uchar>(j,i-1);
-			int ne = im_in.at<uchar>(j-1,i+1);
-			int nw = im_in.at<uchar>(j-1,i-1);
-			int se = im_in.at<uchar>(j+1,i+1);
-			int sw = im_in.at<uchar>(j+1,i-1);
-			int c = im_in.at<uchar>(j,i);
+	for (int i = 1; i< rows-1; i++){
+		for (int j = 1; j< cols-1; j++){
+			int n = im_in.at<uchar>(i-1, j);
+			int s = im_in.at<uchar>(i+1, j);
+			int e = im_in.at<uchar>(i, j+1);
+			int w = im_in.at<uchar>(i,j-1);
+			int ne = im_in.at<uchar>(i-1,j+1);
+			int nw = im_in.at<uchar>(i-1,j-1);
+			int se = im_in.at<uchar>(i+1,j+1);
+			int sw = im_in.at<uchar>(i+1,j-1);
+			int c = im_in.at<uchar>(i,j);
 		
-			int gx = 2*e + ne + se - 2*w - sw - nw + 0*n + 0*c + 0*s;
-			int gy = 2*n + ne + nw - 2*s - sw - se + 0*w + 0*c + 0*e;
+			int gx = 2*e + ne + se - 2*w - sw - nw;
+			int gy = 2*n + ne + nw - 2*s - sw - se;
 			
-			float g = sqrt ((float)(gx*gx) + (float)(gy*gy));
+			// float g = sqrt ((float)(gx*gx) + (float)(gy*gy));
+			int g = abs(gx) + abs(gy);
 			
 			if (g>255)
 				g=255;
 			
-			im_out.at<uchar>(j,i) = (uchar) (g);
+			im_out.at<uchar>(i, j) = (uchar) (g);
 			
 		}
 	}
