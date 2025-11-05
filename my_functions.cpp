@@ -4,35 +4,41 @@
 
 void my_sobel (Mat im_in, Mat im_out)
 {
+	int rows = im_in.rows; // height
+	int cols = im_in.cols; // width
+	uchar* lastLine = im_in.ptr<uchar>(0);
+    uchar* curLine = im_in.ptr<uchar>(1); 
+    uchar* outLine;
+	uchar* nxtLine;
 
- int rows = im_in.rows; // height
- int cols = im_in.cols; // width
- 
-	for (int i = 1; i< rows-1; i++){
-		for (int j = 1; j< cols-1; j++){
-			int n = im_in.at<uchar>(i-1, j);
-			int s = im_in.at<uchar>(i+1, j);
-			int e = im_in.at<uchar>(i, j+1);
-			int w = im_in.at<uchar>(i,j-1);
-			int ne = im_in.at<uchar>(i-1,j+1);
-			int nw = im_in.at<uchar>(i-1,j-1);
-			int se = im_in.at<uchar>(i+1,j+1);
-			int sw = im_in.at<uchar>(i+1,j-1);
-			int c = im_in.at<uchar>(i,j);
-		
-			int gx = 2*e + ne + se - 2*w - sw - nw;
-			int gy = 2*n + ne + nw - 2*s - sw - se;
-			
-			// float g = sqrt ((float)(gx*gx) + (float)(gy*gy));
-			int g = abs(gx) + abs(gy);
-			
-			if (g>255)
-				g=255;
-			
-			im_out.at<uchar>(i, j) = (uchar) (g);
-			
-		}
-	}
+    for (int i = 1; i < rows - 1; i++)
+    {
+        nxtLine = im_in.ptr<uchar>(i + 1);
+        outLine = im_out.ptr<uchar>(i);
+        for (int j = 1; j < cols - 1; j++)
+        {
+            int nw = lastLine[j - 1];
+			int n  = lastLine[j];
+            int ne = lastLine[j + 1];
+
+            int w  = curLine[j - 1];
+            int e  = curLine[j + 1];
+
+            int sw = nxtLine[j - 1];
+            int s  = nxtLine[j];
+            int se = nxtLine[j + 1];
+
+            int gx = 2*e + ne + se - 2*w - sw - nw;
+            int gy = 2*n + ne + nw - 2*s - sw - se;
+            int g = abs(gx) + abs(gy);
+            if (g > 255)
+                g = 255;
+                
+            outLine[j] = (uchar)(g);
+        }
+        lastLine = curLine;
+        curLine = nxtLine;
+    }
 
 };
 
