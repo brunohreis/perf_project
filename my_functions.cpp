@@ -1,7 +1,7 @@
 #include "my_functions.hpp"
 #include <math.h>
-#include <numeric>  // Necessário para std::accumulate
-#include <vector>   // Necessário para std::vector
+#include <numeric> 
+#include <vector>  
 
 
 /* #include <omp.h>
