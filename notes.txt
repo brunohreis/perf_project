@@ -1,1 +1,2 @@
 TODO: test both sobel versions in esiee's hardware
+g++ -O3 `pkg-config --cflags opencv4` my_functions.cpp projet_24_v1.cpp `pkg-config --libs opencv4` -o projet -lm
