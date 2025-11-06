@@ -11,4 +11,5 @@ using namespace std;
 using namespace cv;
 
 void my_sobel (Mat , Mat );
-void my_median (Mat, Mat, int );
+// void my_sobel_parallelized(Mat , Mat );
+void my_median_better(Mat, Mat, int );

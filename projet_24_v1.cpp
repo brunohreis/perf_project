@@ -199,7 +199,7 @@ int main (int argc, char *argv[]) {
     // mesure de temps d'exÃ©cution de cette partie :
 	gettimeofday(&t0,NULL);
     // **********************************************************************
-    my_median (im_in_gray, im_blurred,n);
+    my_median_better(im_in_gray, im_blurred,n);
     gettimeofday(&t1,NULL);
     temp  = (double)((t1.tv_sec-t0.tv_sec)*1000000LL + t1.tv_usec-t0.tv_usec)/1000.0;
     t_mycode_median = t_mycode_median + temp;
@@ -208,7 +208,7 @@ int main (int argc, char *argv[]) {
     // mesure de temps d'exÃ©cution de cette partie :
     gettimeofday(&t0,NULL);
     // ********************************************************************** 
-     my_sobel (im_blurred, grad);
+     my_sobel(im_blurred, grad);
   
     // **********************************************************************
     // mesure de temps d'exÃ©cution de cette partie :
