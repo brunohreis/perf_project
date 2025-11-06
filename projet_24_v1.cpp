@@ -123,7 +123,7 @@ int main () {
  moveWindow("Video Mediane", 10, 500);
  moveWindow("Video Edge detection", 800, 500);
   
- FILE* resultsFile = fopen("results.txt", "w");
+ FILE* resultsFile = fopen("results_v2.txt", "w");
   if (resultsFile == NULL)
   {
     return -1;
@@ -133,10 +133,12 @@ int main () {
 // boucle de 100 itÃ©rations
 //
  
- for(int n=3; n<34; n+=2){
+ for(int n=3; n<100; n+=2){
   double iter  = 20;   
   struct timeval	t0;
   struct timeval	t1;
+  double t_naive_sobel = 0.0;
+  double t_naive_median = 0.0;
   double		t_ref_median = 0.0;
   double		t_ref_grad  = 0.0;
   double		t_mycode_median  = 0.0;
@@ -198,14 +200,22 @@ int main () {
     // CODE A OPTIMISER 
     // --------------------------------------------------------------------------
     // mesure de temps d'exÃ©cution de cette partie :
-	gettimeofday(&t0,NULL);
+	  gettimeofday(&t0,NULL);
     // **********************************************************************
-    my_median_better(im_in_gray, im_blurred,n);
+    my_median(im_in_gray, im_blurred,n);
     gettimeofday(&t1,NULL);
     temp  = (double)((t1.tv_sec-t0.tv_sec)*1000000LL + t1.tv_usec-t0.tv_usec)/1000.0;
-    t_mycode_median = t_mycode_median + temp;
-          printf("-------------------------------------\n");
-     printf("Median MyCode \t %g \n", temp);
+    t_naive_median += temp;
+    printf("-------------------------------------\n");
+    printf("Naive median \t %g \n", temp);
+        // **********************************************************************
+    gettimeofday(&t0,NULL);
+    my_median_optimized(im_in_gray, im_blurred,n);
+    gettimeofday(&t1,NULL);
+    temp  = (double)((t1.tv_sec-t0.tv_sec)*1000000LL + t1.tv_usec-t0.tv_usec)/1000.0;
+    t_mycode_median += temp;
+    printf("-------------------------------------\n");
+    printf("Optimized median \t %g \n", temp);
     // mesure de temps d'exÃ©cution de cette partie :
     gettimeofday(&t0,NULL);
     // ********************************************************************** 
@@ -215,9 +225,17 @@ int main () {
     // mesure de temps d'exÃ©cution de cette partie :
     gettimeofday(&t1,NULL);
     temp  = (double)((t1.tv_sec-t0.tv_sec)*1000000LL + t1.tv_usec-t0.tv_usec)/1000.0;
-    t_mycode_grad  = t_mycode_grad + temp;
-      printf("Sobel MyCode \t %g \n", temp);
-    // ********************************************************************** 
+    t_naive_sobel += temp;
+    printf("Naive sobel: \t %g \n", temp);
+          // ********************************************************************** 
+    gettimeofday(&t0,NULL);
+    my_sobel_optimized(im_blurred, grad);
+    gettimeofday(&t1,NULL);
+
+    temp  = (double)((t1.tv_sec-t0.tv_sec)*1000000LL + t1.tv_usec-t0.tv_usec)/1000.0;
+    t_mycode_grad += temp;
+      printf("Optimized sobel: \t %g \n", temp);
+
     imshow("Video input",im_in);
     imshow("Video gray levels",im_in_gray);
     imshow("Video Mediane",im_blurred);    
@@ -235,26 +253,30 @@ int main () {
   // Emprimer le temps d'exÃ©uction moyen par version
    t_ref_median   = t_ref_median / no_measures;
    t_ref_grad = t_ref_grad / no_measures;
+   t_naive_median /= no_measures;
+   t_naive_sobel /= no_measures;
    t_mycode_median  = t_mycode_median / no_measures;
    t_mycode_grad  = t_mycode_grad / no_measures;  
    
    printf("Mean median (n = %d) time reference  %f ms\n",n,t_ref_median);
+  printf("Mean median (n = %d) time optimized %f ms\n",n,t_mycode_median);
+  printf("Mean median (n = %d) time naive %f ms\n",n,t_naive_median);
    printf("Mean sobel time reference  %f ms\n",t_ref_grad);
-   printf("Mean median (n = %d) time mycode %f ms\n",n,t_mycode_median);
-   printf("Mean sobel time mycode %f ms\n\n",t_mycode_grad);
+   printf("Mean sobel time optimized %f ms\n\n",t_mycode_grad);
+   printf("Mean sobel time naive %f ms\n\n",t_naive_sobel);
     // --- Salva no arquivo ---
     fprintf(resultsFile, "Mean median (n = %d) time reference  %f ms\n",n,t_ref_median);
+    fprintf(resultsFile, "Mean median (n = %d) time optimized %f ms\n",n,t_mycode_median);
+    fprintf(resultsFile, "Mean median (n = %d) time naive %f ms\n",n,t_naive_median);
     fprintf(resultsFile, "Mean sobel time reference  %f ms\n",t_ref_grad);
-    fprintf(resultsFile, "Mean median (n = %d) time mycode %f ms\n",n,t_mycode_median);
-    fprintf(resultsFile, "Mean sobel time mycode %f ms\n\n",t_mycode_grad);
+    fprintf(resultsFile, "Mean sobel time optimized %f ms\n\n",t_mycode_grad);
+    fprintf(resultsFile, "Mean sobel time naive %f ms\n\n",t_naive_sobel);
     // ------------------------
    
-   // (Nota: Speedup é uma proporção, não tem unidade 'ms')
-   printf("Speedup median %f\n",t_ref_median/t_mycode_median);
-   printf("Speedup sobel %f\n\n",t_ref_grad/t_mycode_grad);
-    // --- Salva no arquivo ---
-    fprintf(resultsFile, "Speedup median %f\n",t_ref_median/t_mycode_median);
-    fprintf(resultsFile, "Speedup sobel %f\n\n",t_ref_grad/t_mycode_grad);
+    printf("Speedup median %f\n",t_naive_median/t_mycode_median);
+    printf("Speedup sobel %f\n\n",t_naive_sobel/t_mycode_grad);
+    fprintf(resultsFile, "Speedup median %f\n",t_naive_median/t_mycode_median);
+    fprintf(resultsFile, "Speedup sobel %f\n\n",t_naive_sobel/t_mycode_grad);
     // ------------------------
    
     printf("------------------\n");
