@@ -3,7 +3,7 @@
 #include <numeric> 
 #include <vector>  
 
-void my_sobel(Mat im_in, Mat im_out)
+void my_sobel(const Mat& im_in, Mat& im_out)
 {
 	const int rows = im_in.rows; // height
 	const int cols = im_in.cols; // width
@@ -227,7 +227,7 @@ void my_median_better(Mat im_in, Mat im_out, int n)
 
 void my_median_better_v2(const Mat& im_in, Mat& im_out, int n)
 {
-const int r = n / 2;
+    const int r = n / 2;
     const int rows = im_in.rows, cols = im_in.cols;
     const int cols_pad = cols + 2*r;
 
