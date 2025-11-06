@@ -253,29 +253,30 @@ void my_median_better_v2(const Mat& im_in, Mat& im_out, int n)
     // 4) Kernel histogram
     uint16_t Hker[256];
 
+    const int median_thr = (n*n + 1) / 2;
     for (int y = 0; y < rows; ++y) {
         // slide column histograms one row down (except y==0)
         if (y > 0) {
             const uchar* __restrict top = im_pad.ptr<uchar>(y - 1);
             const uchar* __restrict bot = im_pad.ptr<uchar>(y + n - 1);
             for (int j = 0; j < cols_pad; ++j) {
-                Hcol_at(j)[ top[j] ]--;
-                Hcol_at(j)[ bot[j] ]++;
+                uint16_t* __restrict hc = Hcol_at(j);
+                hc[ top[j] ]--;
+                hc[ bot[j] ]++;
             }
         }
 
         // build kernel histogram for j=0: sum of first n columns
-        std::fill(std::begin(Hker), std::end(Hker), 0);
+        std::fill_n(Hker, 256, 0);
         for (int j = 0; j < n; ++j) {
             const uint16_t* __restrict hc = Hcol_at(j);
             #pragma GCC unroll 256
             for (int v = 0; v < 256; ++v) Hker[v] += hc[v];
         }
 
-        // slide horizontally
         uchar* __restrict out = im_out.ptr<uchar>(y);
-        const int median_thr = (n*n + 1) / 2;
 
+        // horizontal sliding
         for (int x = 0; x < cols; ++x) {
             // find median
             int acc = 0, v = 0;

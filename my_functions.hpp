@@ -12,4 +12,5 @@ using namespace cv;
 
 void my_sobel (const Mat&, Mat&);
 // void my_sobel_parallelized(Mat , Mat );
-void my_median_better(const Mat&, const Mat&, int );
+void my_median_better(Mat, Mat, int );
+void my_median_better_v2(const Mat&, Mat&, int);
