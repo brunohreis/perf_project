@@ -3,6 +3,10 @@
 #include <numeric>  // Necessário para std::accumulate
 #include <vector>   // Necessário para std::vector
 
+// Define constants for the multi-level histogram
+#define COARSE_BINS 16 // 256 / 16
+#define FINE_BINS 16   // 4-bit coarse, 4-bit fine
+
 
 /* #include <omp.h>
 // if OpenMP is used, the command to compile must have -fopenmp
@@ -37,14 +41,14 @@ void my_sobel_parallelized (Mat im_in, Mat im_out)
 } */
 
 
-void my_sobel(Mat im_in, Mat im_out)
+void my_sobel(const Mat& im_in, Mat& im_out)
 {
-	int rows = im_in.rows; // height
-	int cols = im_in.cols; // width
-	uchar* lastLine = im_in.ptr<uchar>(0);
-    uchar* curLine = im_in.ptr<uchar>(1); 
-    uchar* outLine;
-	uchar* nxtLine;
+	const int rows = im_in.rows; // height
+	const int cols = im_in.cols; // width
+	const uchar* __restrict lastLine = im_in.ptr<uchar>(0);
+    const uchar* __restrict curLine = im_in.ptr<uchar>(1); 
+    uchar* __restrict outLine;
+	const uchar* __restrict nxtLine;
 
     for (int i = 1; i < rows - 1; i++)
     {
@@ -58,6 +62,8 @@ void my_sobel(Mat im_in, Mat im_out)
         int n = lastLine[1];
         int c = curLine[1];
         int s = nxtLine[1];
+
+        __builtin_prefetch(nxtLine + 64, 0, 1);
 
         for (int j = 1; j < cols - 1; j++)
         {
@@ -152,144 +158,190 @@ void my_median (Mat im_in, Mat im_out, int n)
 	}
 }; */
 
+// --- 1. NEW DATA STRUCTURES ---
+
 /**
- * @brief Adiciona um valor de pixel a um histograma (vetor de 256 posições).
+ * @brief Holds a 2-level histogram (Section III-C)
+ * 'coarse' has 16 bins (for upper 4 bits)
+ * 'fine' has 256 bins (for all 8 bits)
  */
-inline void hist_add(vector<int>& hist, uchar value) {
-    hist[value]++;
+struct MultiLevelHist {
+    vector<int> coarse; // 16 bins [cite: 185]
+    vector<int> fine;   // 256 bins [cite: 184]
+
+    MultiLevelHist() : coarse(COARSE_BINS, 0), fine(256, 0) {}
+};
+
+// --- 2. NEW HELPER FUNCTIONS (for MultiLevelHist) ---
+
+/**
+ * @brief Adds a pixel value to a multi-level histogram
+ */
+inline void hist_add_multi(MultiLevelHist& hist, uchar value) {
+    hist.coarse[value >> 4]++; // Add to coarse bin (upper 4 bits) [cite: 183-185]
+    hist.fine[value]++;        // Add to fine bin (all 8 bits)
 }
 
 /**
- * @brief Subtrai um valor de pixel de um histograma.
+ * @brief Subtracts a pixel value from a multi-level histogram
  */
-inline void hist_sub(vector<int>& hist, uchar value) {
-    hist[value]--;
+inline void hist_sub_multi(MultiLevelHist& hist, uchar value) {
+    hist.coarse[value >> 4]--; // Sub from coarse bin
+    hist.fine[value]--;        // Sub from fine bin
 }
 
 /**
- * @brief Adiciona um histograma (h_add) a outro (H_kernel).
- * Isto é o O(256) mencionado no artigo[cite: 150].
+ * @brief Adds only the COARSE level of a column histogram to the kernel's coarse histogram
  */
-inline void hist_add_hist(vector<int>& H_kernel, const vector<int>& h_add) {
-    for (int k = 0; k < 256; k++) {
-        H_kernel[k] += h_add[k];
+inline void hist_add_coarse(vector<int>& H_kernel_coarse, const MultiLevelHist& h_col) {
+    for (int k = 0; k < COARSE_BINS; k++) {
+        H_kernel_coarse[k] += h_col.coarse[k];
     }
 }
 
 /**
- * @brief Subtrai um histograma (h_sub) de outro (H_kernel).
- * Isto é o O(256) mencionado no artigo[cite: 151].
+ * @brief Subtracts only the COARSE level
  */
-inline void hist_sub_hist(vector<int>& H_kernel, const vector<int>& h_sub) {
-    for (int k = 0; k < 256; k++) {
-        H_kernel[k] -= h_sub[k];
+inline void hist_sub_coarse(vector<int>& H_kernel_coarse, const MultiLevelHist& h_col) {
+    for (int k = 0; k < COARSE_BINS; k++) {
+        H_kernel_coarse[k] -= h_col.coarse[k];
     }
 }
 
-/**
- * @brief Encontra o valor mediano em um histograma.
- * Esta é a operação O(1) (na verdade O(128) em média)[cite: 85, 152].
- * @param hist O histograma do kernel.
- * @param threshold O valor para encontrar ( (n*n) / 2 + 1 ).
- * @return O valor do pixel mediano (uchar).
- */
-inline uchar find_median_from_hist(const vector<int>& hist, int threshold) {
-    int sum = 0;
-    for (int k = 0; k < 256; k++) {
-        sum += hist[k];
-        if (sum >= threshold) {
-            return (uchar)k;
+inline uchar find_median_on_demand(
+    const vector<int>& H_kernel_coarse, // 16 bins, always up-to-date
+    vector<int>& H_kernel_fine_segment, // 16 bins, REBUILT every time
+    const vector<MultiLevelHist>& col_hists,
+    int median_threshold,
+    int j_local, // Current *local* column index (relative to stripe)
+    int n        // Kernel width
+) {
+    // 1. Find median in COARSE histogram [cite: 187-189]
+    int sum_coarse = 0;
+    int coarse_idx = 0;
+    for (; coarse_idx < COARSE_BINS; coarse_idx++) {
+        sum_coarse += H_kernel_coarse[coarse_idx];
+        if (sum_coarse >= median_threshold) {
+            break;
         }
     }
-    return 255; // Caso não encontre (não deve acontecer)
+
+    // 2. Calculate local threshold for the fine segment
+    int fine_threshold = median_threshold - (sum_coarse - H_kernel_coarse[coarse_idx]);
+    int fine_segment_start_bin = coarse_idx * FINE_BINS;
+
+    // 3. ALWAYS Rebuild the 16-bin fine segment from scratch
+    // This fixes the visual bug by never using stale data.
+    H_kernel_fine_segment.assign(FINE_BINS, 0); // Reset buffer to all zeros
+    
+    int start_col = j_local; // Left-most column in the window *within the stripe buffer*
+    int end_col = j_local + n;
+    
+    for (int k_col = start_col; k_col < end_col; k_col++) {
+        for (int k_bin = 0; k_bin < FINE_BINS; k_bin++) {
+            H_kernel_fine_segment[k_bin] += col_hists[k_col].fine[fine_segment_start_bin + k_bin];
+        }
+    }
+
+    // 4. Find median in the now-correct FINE segment
+    int sum_fine = 0;
+    int fine_idx = 0;
+    for (; fine_idx < FINE_BINS; fine_idx++) {
+        sum_fine += H_kernel_fine_segment[fine_idx];
+        if (sum_fine >= fine_threshold) {
+            break;
+        }
+    }
+
+    // 5. Return the final median value
+    return (uchar)(fine_segment_start_bin + fine_idx);
 }
 
 
-// ======================================================================
-// FUNÇÃO PRINCIPAL MY_MEDIAN (O(1) com Histogramas de Coluna)
-// ======================================================================
+// --- 4. FUNÇÃO PRINCIPAL DA MEDIANA (OTIMIZADA PARA CACHE) ---
+
+// Define a largura do bloco para ser "amigável" ao cache L2
+// Um histograma tem ~1KB. 128 hist. ~= 128KB, que cabe facilmente no cache.
+#define CACHE_FRIENDLY_STRIPE_WIDTH 128
 
 void my_median_better(Mat im_in, Mat im_out, int n)
 {
-    int r = n / 2; // Raio do kernel
-    int k_size = n * n; // Tamanho total do kernel (ex: 9, 25)
-    int median_threshold = (k_size / 2) + 1; // Posição da mediana
-
+    int r = n / 2; 
+    int k_size = n * n; 
+    int median_threshold = (k_size / 2) + 1;
     int rows = im_in.rows;
     int cols = im_in.cols;
 
-    // 1. Criar uma imagem 'im_pad' com bordas replicadas.
-    // Isso elimina *todos* os `if` de verificação de borda.
+    // 1. Crie a imagem com preenchimento (padding) UMA VEZ
     Mat im_pad;
     copyMakeBorder(im_in, im_pad, r, r, r, r, BORDER_REFLECT_101);
 
-    // 2. Inicialização do vetor de histogramas de colunas 
-    // Um histograma (de 256 posições) para CADA coluna da imagem PADDED.
-    vector<vector<int>> col_hists(im_pad.cols, vector<int>(256, 0));
+    // 2. Otimização (Seção III-B): Loop sobre "Blocos Verticais"
+    // Isso garante que o vetor 'col_hists' caiba no cache 
+    for (int j_base = 0; j_base < cols; j_base += CACHE_FRIENDLY_STRIPE_WIDTH) 
+    {
+        int j_start = j_base;
+        int j_end = std::min(j_base + CACHE_FRIENDLY_STRIPE_WIDTH, cols);
+        int stripe_width = j_end - j_start;
 
-    // 3. Histograma do Kernel (H)
-    vector<int> kernel_hist(256, 0);
+        // 3. Inicialize um VETOR DE HISTOGRAMA PEQUENO (que cabe no cache)
+        // Precisamos de 'stripe_width' colunas + 'n' colunas extras para a janela
+        vector<MultiLevelHist> col_hists(stripe_width + n);
 
-    // Loop principal (linha por linha)
-    for (int i = 0; i < rows; i++) {
-        
-        // ============================================================
-        // A. INICIALIZAÇÃO DA LINHA 'i'
-        // ============================================================
-        
-        // 4. Preenchimento/Atualização dos histogramas de coluna
-        if (i == 0) {
-            // -- Primeira linha (i=0): Preenchimento inicial --
-            // Preenche todos os histogramas de coluna com as primeiras 'n' linhas
-            for (int j_pad = 0; j_pad < im_pad.cols; j_pad++) {
-                for (int i_k = 0; i_k < n; i_k++) {
-                    hist_add(col_hists[j_pad], im_pad.at<uchar>(i_k, j_pad));
+        // Loop principal (linha por linha) *dentro* do loop de bloco
+        for (int i = 0; i < rows; i++) {
+            
+            if (i == 0) {
+                // Primeira linha: Preenche os histogramas do bloco do zero
+                for (int j_s = 0; j_s < (stripe_width + n); j_s++) {
+                    int j_pad = j_start + j_s; // Coluna global na imagem com padding
+                    if (j_pad >= im_pad.cols) break;
+                    
+                    col_hists[j_s] = MultiLevelHist(); // Reseta o histograma
+                    for (int i_k = 0; i_k < n; i_k++) {
+                        hist_add_multi(col_hists[j_s], im_pad.at<uchar>(i_k, j_pad));
+                    }
+                }
+            } else {
+                // Outras linhas: "Desliza" os histogramas do bloco para baixo
+                for (int j_s = 0; j_s < (stripe_width + n); j_s++) {
+                    int j_pad = j_start + j_s;
+                    if (j_pad >= im_pad.cols) break;
+                    
+                    uchar val_remove = im_pad.at<uchar>(i - 1, j_pad);
+                    uchar val_add    = im_pad.at<uchar>(i + n - 1, j_pad);
+                    hist_sub_multi(col_hists[j_s], val_remove);
+                    hist_add_multi(col_hists[j_s], val_add);
                 }
             }
-        } else {
-            // -- Outras linhas (i>0): "Deslizar" todos os histogramas de coluna 1 linha para baixo --
-            // Esta é a Etapa 1 (Figura 2a) do artigo 
-            for (int j_pad = 0; j_pad < im_pad.cols; j_pad++) {
-                // Remove o pixel de cima (que saiu da janela)
-                uchar val_remove = im_pad.at<uchar>(i - 1, j_pad);
-                // Adiciona o pixel de baixo (que entrou na janela)
-                uchar val_add    = im_pad.at<uchar>(i + n - 1, j_pad);
+
+            // 5. Inicializa o histograma 'coarse' do kernel para a primeira coluna do bloco
+            vector<int> kernel_hist_coarse(COARSE_BINS, 0);
+            for (int j_k = 0; j_k < n; j_k++) {
+                hist_add_coarse(kernel_hist_coarse, col_hists[j_k]);
+            }
+
+            // Buffer temporário para o segmento fino (agora dentro do loop de linha)
+            vector<int> kernel_hist_fine_segment(FINE_BINS, 0);
+
+            // 6. Loop de Coluna (processa apenas colunas *deste* bloco)
+            for (int j = j_start; j < j_end; j++) {
                 
-                hist_sub(col_hists[j_pad], val_remove);
-                hist_add(col_hists[j_pad], val_add);
+                // j_local é o índice no 'col_hists' (de 0 a stripe_width)
+                int j_local = j - j_start; 
+                
+                // 7. Calcula a mediana (usando a função CORRIGIDA)
+                im_out.at<uchar>(i, j) = find_median_on_demand(
+                    kernel_hist_coarse, kernel_hist_fine_segment, col_hists, 
+                    median_threshold, j_local, n
+                );
+
+                if (j == j_end - 1) break; // Não desliza na última coluna do bloco
+                
+                // 8. "Desliza" o histograma 'coarse' do kernel
+                hist_sub_coarse(kernel_hist_coarse, col_hists[j_local]);
+                hist_add_coarse(kernel_hist_coarse, col_hists[j_local + n]);
             }
-        }
-
-        // 5. Cálculo do histograma do kernel (H) para a *primeira coluna* (j=0)
-        // O kernel H é a soma dos 'n' primeiros histogramas de coluna 
-        kernel_hist.assign(256, 0); // Limpa o H
-        for (int j_k = 0; j_k < n; j_k++) {
-            hist_add_hist(kernel_hist, col_hists[j_k]);
-        }
-
-        // ============================================================
-        // B. LOOP DA COLUNA 'j' (Deslizando o kernel H)
-        // ============================================================
-        for (int j = 0; j < cols; j++) {
-            
-            // 6. Computação da mediana em O(1) e atribuição [cite: 138, 145]
-            // (O kernel_hist atual representa a janela centrada em (i, j))
-            im_out.at<uchar>(i, j) = find_median_from_hist(kernel_hist, median_threshold);
-
-            // 7. Preparar o kernel_hist para a *próxima* iteração (j+1)
-            // (Não faz isso na última coluna)
-            if (j == cols - 1) {
-                break; 
-            }
-            
-            // "Desliza" o kernel H uma coluna para a direita 
-            // Esta é a Etapa 2 (Figura 2b) do artigo
-            
-            // Subtrai o histograma da coluna que saiu (esquerda)
-            hist_sub_hist(kernel_hist, col_hists[j]);
-            
-            // Adiciona o histograma da coluna que entrou (direita)
-            hist_add_hist(kernel_hist, col_hists[j + n]);
         }
     }
 }

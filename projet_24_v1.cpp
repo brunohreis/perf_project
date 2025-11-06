@@ -54,7 +54,7 @@ using namespace		cv;
  ----------------------------------------------*/
  
  
-int main (int argc, char *argv[]) {
+int main () {
 //----------------------------------------------
 // Video acquisition - opening
 // on ouvre ici la lecture du flux vidÃƒÂ©o
@@ -123,17 +123,18 @@ int main (int argc, char *argv[]) {
  moveWindow("Video Mediane", 10, 500);
  moveWindow("Video Edge detection", 800, 500);
   
+ FILE* resultsFile = fopen("results.txt", "w");
+  if (resultsFile == NULL)
+  {
+    return -1;
+  }
   
 // --------------------------------------------------
 // boucle de 100 itÃ©rations
 //
- int	n;
- if (argc == 2)
-   n = atoi(argv[1]);	//taille de filtre mÃ©dian - doit Ãªtre variables !
  
-  double iter  = 100; 
-  
-  
+ for(int n=3; n<34; n+=2){
+  double iter  = 20;   
   struct timeval	t0;
   struct timeval	t1;
   double		t_ref_median = 0.0;
@@ -223,22 +224,44 @@ int main (int argc, char *argv[]) {
     imshow("Video Edge detection",grad);  
   
     key	= waitKey(1);
-  }
-  printf("========================================\n");
+    }
+    printf("========================================\n");
+    printf("Kernel radius: %d\n", n);
+    // --- Salva no arquivo ---
+    fprintf(resultsFile, "========================================\n");
+    fprintf(resultsFile, "Kernel radius: %d\n", n);
+    // ------------------------
+
   // Emprimer le temps d'exÃ©uction moyen par version
    t_ref_median   = t_ref_median / no_measures;
    t_ref_grad = t_ref_grad / no_measures;
    t_mycode_median  = t_mycode_median / no_measures;
    t_mycode_grad  = t_mycode_grad / no_measures;  
    
-   printf("Mean meadian time reference  %f ms\n",t_ref_median);
+   printf("Mean median (n = %d) time reference  %f ms\n",n,t_ref_median);
    printf("Mean sobel time reference  %f ms\n",t_ref_grad);
-   printf("Mean median time mycode %f ms\n",t_mycode_median);
+   printf("Mean median (n = %d) time mycode %f ms\n",n,t_mycode_median);
    printf("Mean sobel time mycode %f ms\n\n",t_mycode_grad);
+    // --- Salva no arquivo ---
+    fprintf(resultsFile, "Mean median (n = %d) time reference  %f ms\n",n,t_ref_median);
+    fprintf(resultsFile, "Mean sobel time reference  %f ms\n",t_ref_grad);
+    fprintf(resultsFile, "Mean median (n = %d) time mycode %f ms\n",n,t_mycode_median);
+    fprintf(resultsFile, "Mean sobel time mycode %f ms\n\n",t_mycode_grad);
+    // ------------------------
    
-      printf("Speedup median %f ms\n",t_ref_median/t_mycode_median);
-      printf("Speedup sobel %f ms\n",t_ref_grad/t_mycode_grad);
+   // (Nota: Speedup é uma proporção, não tem unidade 'ms')
+   printf("Speedup median %f\n",t_ref_median/t_mycode_median);
+   printf("Speedup sobel %f\n\n",t_ref_grad/t_mycode_grad);
+    // --- Salva no arquivo ---
+    fprintf(resultsFile, "Speedup median %f\n",t_ref_median/t_mycode_median);
+    fprintf(resultsFile, "Speedup sobel %f\n\n",t_ref_grad/t_mycode_grad);
+    // ------------------------
    
     printf("------------------\n");
-   
+    // --- Salva no arquivo ---
+    fprintf(resultsFile, "------------------\n");
+  }
+  
+   fclose(resultsFile);
 }
+  
