@@ -58,7 +58,7 @@ int main () {
 // Video acquisition - opening
 // on ouvre ici la lecture du flux vidÃƒÂ©o
 //----------------------------------------------
-  VideoCapture cap(0); // le numÃƒÂ©ro 0 indique le point d'accÃƒÂ¨s Ãƒ  la camÃƒÂ©ra 0 = > /dev/video0
+  VideoCapture cap(4); // le numÃƒÂ©ro 0 indique le point d'accÃƒÂ¨s Ãƒ  la camÃƒÂ©ra 0 = > /dev/video0
   if(!cap.isOpened()){
     cout << "Errore"; return -1;
   
@@ -127,14 +127,10 @@ int main () {
  fprintf(sobelFile, "n, reference, naive, optimized, speedup\n");
  fprintf(medianFile, "n, reference, naive, optimized, speedup\n");
 
-  if (resultsFile == NULL)
+  if ((sobelFile == NULL) || (medianFile == NULL))
   {
     return -1;
   }
-  
-// --------------------------------------------------
-// boucle de 100 itÃ©rations
-//
  
  for(int n=3; n<50; n+=2){
   printf("n: %d", n);
