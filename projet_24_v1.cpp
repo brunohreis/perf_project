@@ -269,9 +269,9 @@ int main () {
     fprintf(sobelFile, "%f,",t_naive_sobel);
     fprintf(sobelFile, "%f,",t_mycode_grad);
     fprintf(sobelFile, "%f\n",t_naive_sobel/t_mycode_grad);
-    fprintf(medianFile, "%f,",n,t_ref_median);
-    fprintf(medianFile, "%f,",n,t_naive_median);
-    fprintf(medianFile, "%f,",n,t_mycode_median);
+    fprintf(medianFile, "%f,",t_ref_median);
+    fprintf(medianFile, "%f,",t_naive_median);
+    fprintf(medianFile, "%f,",t_mycode_median);
     fprintf(medianFile, "%f\n",t_naive_median/t_mycode_median);
     // ------------------------
    
